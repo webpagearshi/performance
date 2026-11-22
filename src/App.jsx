@@ -1,7 +1,9 @@
+import FlightNetwork from "./components/FlightNetwork";
+
 function App() {
   return (
     <main>
-      <h1>Flight Routes</h1>
+      <FlightNetwork />
     </main>
   );
 }
