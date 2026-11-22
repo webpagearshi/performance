@@ -1,7 +1,7 @@
 function App() {
   return (
     <main>
-      <h1>Global Temperature Heatmap</h1>
+      <h1>Flight Routes</h1>
     </main>
   );
 }
