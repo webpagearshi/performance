@@ -1,6 +1,39 @@
 import { useRef, useEffect } from "react";
 import * as d3 from "d3";
 
+// Draw flight routes
+function drawRoutes(ctx, links, airportLookup) {
+  ctx.beginPath();
+
+  for (const link of links) {
+    const source = airportLookup.get(link.source);
+    const target = airportLookup.get(link.target);
+
+    if (!source || !target) continue;
+
+    ctx.moveTo(source.x, source.y);
+    ctx.lineTo(target.x, target.y);
+  }
+
+  ctx.strokeStyle = "#d8a9dc";
+  ctx.globalAlpha = 0.35;
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  ctx.globalAlpha = 1;
+}
+
+// Draw airport nodes
+function drawAirports(ctx, nodes) {
+  for (const node of nodes) {
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, 2, 0, 2 * Math.PI);
+
+    ctx.fillStyle = "#f8e8fa";
+    ctx.fill();
+  }
+}
+
 function FlightNetworkCanvas({ network, width, height }) {
   const baseRef = useRef(null);
   const overlayRef = useRef(null);
@@ -23,18 +56,35 @@ function FlightNetworkCanvas({ network, width, height }) {
       },
     );
 
-    // Draw airport nodes
-    for (const node of network.nodes) {
+    // Calculate Canvas positions for every airport
+    const positionedNodes = network.nodes.map((node) => {
       const [x, y] = projection([node.longitude, node.latitude]);
-      ctx.beginPath();
 
-      ctx.arc(x, y, 2, 0, 2 * Math.PI);
+      return {
+        ...node,
+        x,
+        y,
+      };
+    });
 
-      ctx.fillStyle = "#f8e8fa";
-      ctx.fill();
-    }
-  }, [network]);
+    // Create airport lookup
+    const airportLookup = new Map(
+      positionedNodes.map((node) => [node.id, node]),
+    );
 
+    // Create a spatial index of airport positions
+    const airportQuadtree = d3
+      .quadtree()
+      .x((node) => node.x)
+      .y((node) => node.y)
+      .addAll(positionedNodes);
+
+    // Draw routes first
+    drawRoutes(ctx, network.links, airportLookup);
+
+    // Draw airports on top
+    drawAirports(ctx, positionedNodes);
+  }, [network, width, height]);
   return (
     <div
       style={{
