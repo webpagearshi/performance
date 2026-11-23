@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { parseAirports, parseRoutes } from "../utils/data";
+import { parseAirports, parseRoutes, buildNetwork } from "../utils/data";
 
 function FlightNetwork() {
   const [airports, setAirports] = useState([]);
   const [routes, setRoutes] = useState([]);
+  const [network, setNetwork] = useState({
+    nodes: [],
+    links: [],
+  });
 
   useEffect(() => {
     // Load both data files
@@ -14,6 +18,13 @@ function FlightNetwork() {
       // Parse the raw text
       const airportData = parseAirports(airportText);
       const routeData = parseRoutes(routeText);
+      const networkData = buildNetwork(airportData, routeData);
+
+      console.log("Network:", networkData);
+      console.log("Total Nodes:", networkData.nodes.length);
+      console.log("Total Links:", networkData.links.length);
+
+      setNetwork(networkData);
 
       setAirports(airportData);
       setRoutes(routeData);

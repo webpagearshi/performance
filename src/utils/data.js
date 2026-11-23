@@ -25,3 +25,35 @@ export function parseRoutes(text) {
     };
   });
 }
+
+export function buildNetwork(airports, routes) {
+  // Create a lookup of valid airport IDs
+  const airportIds = new Set(airports.map((airport) => airport.id));
+
+  // Keep only airports that appear in at least one valid route
+  const connectedAirportIds = new Set();
+
+  routes.forEach((route) => {
+    if (airportIds.has(route.source) && airportIds.has(route.target)) {
+      connectedAirportIds.add(route.source);
+      connectedAirportIds.add(route.target);
+    }
+  });
+
+  // Create nodes from airports that have valid connections
+  const nodes = airports.filter((airport) =>
+    connectedAirportIds.has(airport.id),
+  );
+
+  // Create links from valid routes
+  const links = routes
+    .filter(
+      (route) => airportIds.has(route.source) && airportIds.has(route.target),
+    )
+    .map((route) => ({
+      source: route.source,
+      target: route.target,
+    }));
+
+  return { nodes, links };
+}
