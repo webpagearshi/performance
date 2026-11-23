@@ -6,6 +6,7 @@ import {
   buildNetwork,
   createAirlineLookup,
 } from "../utils/data";
+import FlightNetworkCanvas from "./FlightNetworkCanvas";
 
 function FlightNetwork() {
   const [airports, setAirports] = useState([]);
@@ -53,9 +54,8 @@ function FlightNetwork() {
   return (
     <div>
       <h2>Flight Network</h2>
-      <p>Total Airports: {airports.length}</p>
-      <p>Total Routes: {routes.length}</p>
-      <p>Total Airlines: {airlines.length}</p>
+
+      <FlightNetworkCanvas network={network} />
     </div>
   );
 }
