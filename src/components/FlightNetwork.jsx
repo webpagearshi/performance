@@ -55,7 +55,7 @@ function FlightNetwork() {
     <div>
       <h2>Flight Network</h2>
 
-      <FlightNetworkCanvas network={network} />
+      <FlightNetworkCanvas network={network} width={800} height={600} />
     </div>
   );
 }
