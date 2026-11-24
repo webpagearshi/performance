@@ -39,8 +39,6 @@ function FlightNetwork() {
         routeData,
         airlineLookupData,
       );
-      console.log("Sample Network Node:", networkData.nodes[0]);
-      console.table([networkData.links[0]]);
 
       // Update React state
       setNetwork(networkData);
@@ -53,8 +51,6 @@ function FlightNetwork() {
 
   return (
     <div>
-      <h2>Flight Network</h2>
-
       <FlightNetworkCanvas network={network} width={800} height={600} />
     </div>
   );
