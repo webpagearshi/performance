@@ -3,6 +3,7 @@ import FlightNetwork from "./components/FlightNetwork";
 
 function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [resetFilters, setResetFilters] = useState(0);
 
   return (
     <div className="app">
@@ -12,7 +13,13 @@ function App() {
 
         <button
           className="search-toggle"
-          onClick={() => setIsSearchOpen(!isSearchOpen)}
+          onClick={() => {
+            if (isSearchOpen) {
+              setResetFilters((previous) => previous + 1);
+            }
+
+            setIsSearchOpen(!isSearchOpen);
+          }}
         >
           {isSearchOpen ? "✕ Close" : "☰"}
         </button>
@@ -21,7 +28,10 @@ function App() {
       {/* Main content */}
       <main className="main-content">
         <div className="network-container">
-          <FlightNetwork isSearchOpen={isSearchOpen} />
+          <FlightNetwork
+            isSearchOpen={isSearchOpen}
+            resetFilters={resetFilters}
+          />
         </div>
       </main>
     </div>

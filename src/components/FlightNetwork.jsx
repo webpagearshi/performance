@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   parseAirports,
   parseRoutes,
@@ -8,7 +8,7 @@ import {
 } from "../utils/data";
 import FlightNetworkCanvas from "./FlightNetworkCanvas";
 
-function FlightNetwork({ isSearchOpen }) {
+function FlightNetwork({ isSearchOpen, resetFilters }) {
   const [airports, setAirports] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [airlines, setAirlines] = useState([]);
@@ -67,31 +67,109 @@ function FlightNetwork({ isSearchOpen }) {
 
   // Filter airports based on the typed city or airport name
   const filteredFromAirports = searchableAirports.filter((airport) =>
-    airport.city.toLowerCase().includes(fromQuery.trim().toLowerCase()),
+    airport.city.toLowerCase().startsWith(fromQuery.trim().toLowerCase()),
   );
 
   const filteredToAirports = searchableAirports.filter((airport) =>
-    airport.city.toLowerCase().includes(toQuery.trim().toLowerCase()),
+    airport.city.toLowerCase().startsWith(toQuery.trim().toLowerCase()),
   );
 
   // Airlines with usable names
   // Get airline IDs that appear in the available flight routes
   const operatingAirlineIds = new Set(routes.map((route) => route.airlineId));
 
-  // Keep only airlines that operate at least one route
+  // Find airlines that operate routes matching the selected airports
+  const availableAirlineIds = new Set(
+    network.links
+      .filter((link) => {
+        const matchesFrom =
+          !selectedFrom || link.source === Number(selectedFrom);
+
+        const matchesTo = !selectedTo || link.target === Number(selectedTo);
+
+        return matchesFrom && matchesTo;
+      })
+      .map((link) => link.airlineId),
+  );
+
+  // Show only airlines operating the matching routes
   const searchableAirlines = airlines
     .filter(
       (airline) =>
-        operatingAirlineIds.has(airline.id) &&
+        availableAirlineIds.has(airline.id) &&
         airline.name &&
         airline.name !== "\\N",
     )
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // Clear airline selection if it is no longer available
+  useEffect(() => {
+    if (
+      selectedAirline &&
+      !searchableAirlines.some(
+        (airline) => airline.id === Number(selectedAirline),
+      )
+    ) {
+      setSelectedAirline("");
+    }
+  }, [selectedFrom, selectedTo, selectedAirline, airlines, network]);
+
+  // Filter routes based on selected search criteria
+  const filteredLinks = useMemo(() => {
+    return network.links.filter((link) => {
+      const matchesFrom = !selectedFrom || link.source === Number(selectedFrom);
+
+      const matchesTo = !selectedTo || link.target === Number(selectedTo);
+
+      const matchesAirline =
+        !selectedAirline || link.airlineId === Number(selectedAirline);
+
+      return matchesFrom && matchesTo && matchesAirline;
+    });
+  }, [network.links, selectedFrom, selectedTo, selectedAirline]);
+
+  // Keep only airports connected to the filtered routes
+  const filteredNodes = useMemo(() => {
+    const connectedAirportIds = new Set();
+
+    filteredLinks.forEach((link) => {
+      connectedAirportIds.add(link.source);
+      connectedAirportIds.add(link.target);
+    });
+
+    return network.nodes.filter((airport) =>
+      connectedAirportIds.has(airport.id),
+    );
+  }, [network.nodes, filteredLinks]);
+
+  const filteredNetwork = useMemo(
+    () => ({
+      nodes: filteredNodes,
+      links: filteredLinks,
+    }),
+    [filteredNodes, filteredLinks],
+  );
+
+  const filteredRouteCount = filteredLinks.length;
+
+  useEffect(() => {
+    if (resetFilters === 0) return;
+
+    setSelectedFrom("");
+    setSelectedTo("");
+    setSelectedAirline("");
+    setFromQuery("");
+    setToQuery("");
+  }, [resetFilters]);
+
   return (
     <div className="flight-layout">
       <div className="canvas-container">
-        <FlightNetworkCanvas network={network} width={800} height={600} />
+        <FlightNetworkCanvas
+          network={filteredNetwork}
+          width={800}
+          height={600}
+        />
       </div>
 
       {isSearchOpen && (
@@ -101,7 +179,7 @@ function FlightNetwork({ isSearchOpen }) {
           <label>From City</label>
           <input
             type="text"
-            list="city-suggestions"
+            list="from-city-suggestions"
             placeholder="Type a departure city..."
             value={fromQuery}
             onChange={(event) => {
@@ -125,7 +203,7 @@ function FlightNetwork({ isSearchOpen }) {
           <label>To City</label>
           <input
             type="text"
-            list="city-suggestions"
+            list="to-city-suggestions"
             placeholder="Type a destination city..."
             value={toQuery}
             onChange={(event) => {
@@ -159,7 +237,16 @@ function FlightNetwork({ isSearchOpen }) {
               </option>
             ))}
           </select>
-
+          <div className="search-results">
+            {filteredRouteCount === 0 ? (
+              <p>No direct routes found.</p>
+            ) : (
+              <p>
+                {filteredRouteCount}{" "}
+                {filteredRouteCount === 1 ? "route" : "routes"} found
+              </p>
+            )}
+          </div>
           <button
             className="clear-filters"
             onClick={() => {
@@ -172,9 +259,23 @@ function FlightNetwork({ isSearchOpen }) {
           >
             Clear filters
           </button>
-          <datalist id="city-suggestions">
+          <datalist id="from-city-suggestions">
             {[...new Set(searchableAirports.map((airport) => airport.city))]
-              .sort((a, b) => a.localeCompare(b))
+              .filter((city) =>
+                city.toLowerCase().startsWith(fromQuery.trim().toLowerCase()),
+              )
+              .sort()
+              .map((city) => (
+                <option key={city} value={city} />
+              ))}
+          </datalist>
+
+          <datalist id="to-city-suggestions">
+            {[...new Set(searchableAirports.map((airport) => airport.city))]
+              .filter((city) =>
+                city.toLowerCase().startsWith(toQuery.trim().toLowerCase()),
+              )
+              .sort()
               .map((city) => (
                 <option key={city} value={city} />
               ))}

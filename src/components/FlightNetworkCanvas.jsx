@@ -20,6 +20,7 @@ function drawRoutes(ctx, links, airportLookup) {
   ctx.strokeStyle = "#596db5";
   ctx.globalAlpha = 0.45;
   ctx.lineWidth = 0.7;
+  ctx.setLineDash([4, 3]);
   ctx.stroke();
 
   ctx.globalAlpha = 1;
@@ -31,7 +32,7 @@ function drawAirports(ctx, nodes) {
     ctx.beginPath();
     ctx.arc(node.x, node.y, 2, 0, 2 * Math.PI);
 
-    ctx.fillStyle = "##293f85";
+    ctx.fillStyle = "#293f85";
     ctx.fill();
   }
 }
@@ -40,6 +41,8 @@ function FlightNetworkCanvas({ network, width, height }) {
   const baseRef = useRef(null);
   const overlayRef = useRef(null);
   const airportQuadtreeRef = useRef(null);
+  const simulationNodesRef = useRef([]);
+  const simulationLinksRef = useRef([]);
   const [hoveredAirport, setHoveredAirport] = useState(null);
 
   console.log("Canvas network:", network);
@@ -117,6 +120,21 @@ function FlightNetworkCanvas({ network, width, height }) {
       };
     });
 
+    // Create separate copies for the D3 force simulation
+    const simulationNodes = positionedNodes.map((node) => ({
+      ...node,
+      geoX: node.x,
+      geoY: node.y,
+    }));
+
+    const simulationLinks = network.links.map((link) => ({
+      ...link,
+    }));
+
+    // Store simulation data in refs
+    simulationNodesRef.current = simulationNodes;
+    simulationLinksRef.current = simulationLinks;
+
     // Create airport lookup
     const airportLookup = new Map(
       positionedNodes.map((node) => [node.id, node]),
@@ -134,7 +152,7 @@ function FlightNetworkCanvas({ network, width, height }) {
 
     console.log("Nearest airport to Canvas center:", nearestAirport);
 
-    // Draw routes first
+    // Draw all routes first
     drawRoutes(ctx, network.links, airportLookup);
 
     // Draw airports on top
@@ -183,8 +201,8 @@ function FlightNetworkCanvas({ network, width, height }) {
     });
   };
 
-  const tooltipWidth = 190;
-  const tooltipHeight = 85;
+  const tooltipWidth = 220;
+  const tooltipHeight = 115;
   const tooltipOffset = 12;
 
   let tooltipX = 0;
@@ -243,23 +261,78 @@ function FlightNetworkCanvas({ network, width, height }) {
             position: "absolute",
             left: tooltipX,
             top: tooltipY,
+            width: tooltipWidth,
             background: "#ffffff",
-            color: "#333333",
-            padding: "10px 12px",
-            borderRadius: "6px",
-            fontSize: "12px",
+            color: "#293f85",
+            padding: "14px 16px",
+            borderRadius: "10px",
+            border: "1px solid #dce3f5",
+            fontFamily: "Arial, sans-serif",
             pointerEvents: "none",
             zIndex: 2,
-            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
-            minWidth: "150px",
+            boxShadow: "0 5px 18px rgba(41, 63, 133, 0.14)",
           }}
         >
-          <strong>{hoveredAirport.name}</strong>
-          <div>
+          <div
+            style={{
+              fontSize: "9px",
+              fontWeight: "700",
+              letterSpacing: "1.2px",
+              color: "#7889bd",
+              marginBottom: "6px",
+            }}
+          >
+            AIRPORT
+          </div>
+
+          <div
+            style={{
+              fontSize: "13px",
+              fontWeight: "700",
+              lineHeight: "1.4",
+              color: "#293f85",
+              marginBottom: "4px",
+            }}
+          >
+            {hoveredAirport.name}
+          </div>
+
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#78809a",
+              marginBottom: "12px",
+            }}
+          >
             {hoveredAirport.city}, {hoveredAirport.country}
           </div>
-          <div>IATA: {hoveredAirport.iata || "N/A"}</div>
-          Routes: {hoveredAirport.routeCount}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              borderTop: "1px solid #edf0f8",
+              paddingTop: "10px",
+            }}
+          >
+            <span style={{ fontSize: "10px", color: "#78809a" }}>
+              IATA · {hoveredAirport.iata || "N/A"}
+            </span>
+
+            <span
+              style={{
+                background: "#eef0fa",
+                color: "#293f85",
+                padding: "5px 9px",
+                borderRadius: "20px",
+                fontSize: "10px",
+                fontWeight: "700",
+              }}
+            >
+              {hoveredAirport.routeCount} routes
+            </span>
+          </div>
         </div>
       )}
     </div>
