@@ -49,21 +49,31 @@ function FlightNetworkCanvas({ network, width, height }) {
   const baseRef = useRef(null);
   const overlayRef = useRef(null);
   const airportQuadtreeRef = useRef(null);
-  const simulationNodesRef = useRef([]);
-  const simulationLinksRef = useRef([]);
-  const simulationRef = useRef(null);
   const pointerPositionRef = useRef(null);
   const pointerFrameRef = useRef(null);
+
   const [hoveredAirport, setHoveredAirport] = useState(null);
 
-  console.log("Canvas network:", network);
-
+  // Draw the base map and flight network
   useEffect(() => {
     const canvas = baseRef.current;
     const ctx = canvas.getContext("2d");
 
+    // Configure high-resolution Canvas
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    // Keep drawing coordinates in CSS pixels
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
     ctx.clearRect(0, 0, width, height);
 
+    // Create geographic projection
     const projection = d3.geoNaturalEarth1().fitExtent(
       [
         [20, 20],
@@ -77,26 +87,25 @@ function FlightNetworkCanvas({ network, width, height }) {
     // Convert world TopoJSON into GeoJSON
     const countries = feature(world, world.objects.countries);
 
-    // Create a geographic path generator
+    // Create geographic path generator
     const path = d3.geoPath(projection, ctx);
 
-    // Background
+    // Create latitude and longitude lines
+    const graticule = d3.geoGraticule10();
+
+    // Draw background
     ctx.fillStyle = "#f5f6fc";
     ctx.fillRect(0, 0, width, height);
 
     // Draw countries
     ctx.beginPath();
     path(countries);
-
     ctx.fillStyle = "#e3e8f7";
     ctx.fill();
 
-    // Draw latitude and longitude lines
-    const graticule = d3.geoGraticule10();
-
+    // Draw graticule
     ctx.beginPath();
     path(graticule);
-
     ctx.strokeStyle = "#c3cce5";
     ctx.lineWidth = 0.6;
     ctx.stroke();
@@ -104,12 +113,10 @@ function FlightNetworkCanvas({ network, width, height }) {
     // Draw country borders
     ctx.beginPath();
     path(countries);
-
     ctx.strokeStyle = "#9baad1";
     ctx.lineWidth = 0.6;
     ctx.stroke();
 
-    // Calculate Canvas positions for every airport
     // Count routes connected to each airport
     const routeCounts = new Map();
 
@@ -119,7 +126,7 @@ function FlightNetworkCanvas({ network, width, height }) {
       routeCounts.set(link.target, (routeCounts.get(link.target) || 0) + 1);
     });
 
-    // Calculate Canvas positions and attach route counts
+    // Calculate Canvas positions for airports
     const positionedNodes = network.nodes.map((node) => {
       const [x, y] = projection([node.longitude, node.latitude]);
 
@@ -131,7 +138,7 @@ function FlightNetworkCanvas({ network, width, height }) {
       };
     });
 
-    // Create separate copies for the D3 force simulation
+    // Create separate copies for D3 force simulation
     const simulationNodes = positionedNodes.map((node) => ({
       ...node,
       geoX: node.x,
@@ -144,11 +151,7 @@ function FlightNetworkCanvas({ network, width, height }) {
       ...link,
     }));
 
-    // Store simulation data in refs
-    simulationNodesRef.current = simulationNodes;
-    simulationLinksRef.current = simulationLinks;
-
-    // Configure the D3 force simulation
+    // Configure D3 force simulation
     const simulation = d3
       .forceSimulation(simulationNodes)
       .force(
@@ -165,87 +168,87 @@ function FlightNetworkCanvas({ network, width, height }) {
       .force("y", d3.forceY((node) => node.geoY).strength(0.9))
       .stop();
 
-    simulationRef.current = simulation;
-
-    // Create airport lookup
-    const airportLookup = new Map(
-      positionedNodes.map((node) => [node.id, node]),
+    // Create airport lookup once
+    const simulationAirportLookup = new Map(
+      simulationNodes.map((node) => [node.id, node]),
     );
 
-    // Create a spatial index of airport positions
+    // Create spatial index for airport hover detection
     airportQuadtreeRef.current = d3
       .quadtree()
       .x((node) => node.x)
       .y((node) => node.y)
       .addAll(simulationNodes);
 
-    // Find the airport nearest to a Canvas position
-    const nearestAirport = airportQuadtreeRef.current.find(400, 300);
-
-    console.log("Nearest airport to Canvas center:", nearestAirport);
-
-    // Redraw the Canvas on every simulation tick
+    // Redraw Canvas on simulation ticks
     simulation.on("tick", () => {
       ctx.clearRect(0, 0, width, height);
 
-      // Redraw background
+      // Background
       ctx.fillStyle = "#f5f6fc";
       ctx.fillRect(0, 0, width, height);
 
-      // Redraw countries
+      // Countries
       ctx.beginPath();
       path(countries);
-
       ctx.fillStyle = "#e3e8f7";
       ctx.fill();
 
-      // Redraw latitude and longitude lines
+      // Graticule
       ctx.beginPath();
       path(graticule);
-
       ctx.strokeStyle = "#c3cce5";
       ctx.lineWidth = 0.6;
       ctx.stroke();
 
-      // Redraw country borders
+      // Country borders
       ctx.beginPath();
       path(countries);
-
       ctx.strokeStyle = "#9baad1";
       ctx.lineWidth = 0.6;
       ctx.stroke();
 
-      // Create lookup using the simulation nodes
-      const simulationAirportLookup = new Map(
-        simulationNodes.map((node) => [node.id, node]),
-      );
-
-      // Draw routes
+      // Flight routes
       drawRoutes(ctx, simulationLinks, simulationAirportLookup);
 
-      // Draw airports
+      // Airports
       drawAirports(ctx, simulationNodes);
     });
-    // Start the force simulation
+
+    // Start force simulation
     simulation.alpha(1).restart();
+
     simulation.on("end", () => {
       simulation.stop();
     });
+
     return () => {
       simulation.stop();
     };
   }, [network, width, height]);
 
+  // Draw the airport hover highlight
   useEffect(() => {
     const canvas = overlayRef.current;
     const ctx = canvas.getContext("2d");
 
-    // Clear the previous hover highlight
+    // Configure high-resolution overlay Canvas
+    const pixelRatio = window.devicePixelRatio || 1;
+
+    canvas.width = Math.round(width * pixelRatio);
+    canvas.height = Math.round(height * pixelRatio);
+
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+    // Clear previous highlight
     ctx.clearRect(0, 0, width, height);
 
     if (!hoveredAirport) return;
 
-    // Draw the hovered airport
+    // Draw hover ring
     ctx.beginPath();
     ctx.arc(hoveredAirport.x, hoveredAirport.y, 6, 0, 2 * Math.PI);
 
@@ -253,12 +256,15 @@ function FlightNetworkCanvas({ network, width, height }) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
+    // Draw highlighted airport
     ctx.beginPath();
     ctx.arc(hoveredAirport.x, hoveredAirport.y, 3, 0, 2 * Math.PI);
 
     ctx.fillStyle = "#293f85";
     ctx.fill();
   }, [hoveredAirport, width, height]);
+
+  // Clean up pending animation frame
   useEffect(() => {
     return () => {
       if (pointerFrameRef.current) {
@@ -267,6 +273,7 @@ function FlightNetworkCanvas({ network, width, height }) {
     };
   }, []);
 
+  // Handle pointer movement
   const handleMouseMove = (event) => {
     const canvas = overlayRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -276,7 +283,7 @@ function FlightNetworkCanvas({ network, width, height }) {
       y: event.clientY - rect.top,
     };
 
-    // Don't schedule another lookup if one is already waiting
+    // Avoid scheduling multiple lookups
     if (pointerFrameRef.current) return;
 
     pointerFrameRef.current = requestAnimationFrame(() => {
@@ -286,6 +293,7 @@ function FlightNetworkCanvas({ network, width, height }) {
 
       if (!position || !airportQuadtreeRef.current) return;
 
+      // Find nearest airport within 12 pixels
       const nearestAirport = airportQuadtreeRef.current.find(
         position.x,
         position.y,
@@ -302,6 +310,7 @@ function FlightNetworkCanvas({ network, width, height }) {
     });
   };
 
+  // Tooltip dimensions
   const tooltipWidth = 220;
   const tooltipHeight = 115;
   const tooltipOffset = 12;
@@ -329,7 +338,7 @@ function FlightNetworkCanvas({ network, width, height }) {
         height,
       }}
     >
-      {/* Base layer */}
+      {/* Base Canvas */}
       <canvas
         ref={baseRef}
         width={width}
@@ -341,7 +350,7 @@ function FlightNetworkCanvas({ network, width, height }) {
         }}
       />
 
-      {/* Interaction layer */}
+      {/* Interaction Canvas */}
       <canvas
         ref={overlayRef}
         width={width}
@@ -356,6 +365,7 @@ function FlightNetworkCanvas({ network, width, height }) {
         onPointerLeave={() => setHoveredAirport(null)}
       />
 
+      {/* Airport tooltip */}
       {hoveredAirport && (
         <div
           style={{

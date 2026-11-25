@@ -12,11 +12,16 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
   const [airports, setAirports] = useState([]);
   const [routes, setRoutes] = useState([]);
   const [airlines, setAirlines] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [airlineLookup, setAirlineLookup] = useState(new Map());
   const [network, setNetwork] = useState({
     nodes: [],
     links: [],
   });
+  const canvasContainerRef = useRef(null);
+  const [canvasWidth, setCanvasWidth] = useState(800);
+
   const [selectedFrom, setSelectedFrom] = useState(""); // State for the selected "from" airport
   const [selectedTo, setSelectedTo] = useState(""); // State for the selected "to" airport
   const [selectedAirline, setSelectedAirline] = useState(""); // State for the selected airline
@@ -24,34 +29,84 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
   const [toQuery, setToQuery] = useState(""); // State for the "to" airport search query
 
   useEffect(() => {
-    // Load all three data files
-    Promise.all([
-      fetch("/src/data/airports.dat").then((response) => response.text()),
-      fetch("/src/data/routes.dat").then((response) => response.text()),
-      fetch("/src/data/airlines.dat").then((response) => response.text()),
-    ]).then(([airportText, routeText, airlineText]) => {
-      // Parse the raw data
-      const airportData = parseAirports(airportText);
-      const routeData = parseRoutes(routeText);
-      const airlineData = parseAirlines(airlineText);
+    let cancelled = false;
 
-      // Build the airline lookup
-      const airlineLookupData = createAirlineLookup(airlineData);
+    async function loadData() {
+      try {
+        setIsLoading(true);
+        setLoadError("");
 
-      // Build the flight network
-      const networkData = buildNetwork(
-        airportData,
-        routeData,
-        airlineLookupData,
-      );
+        // Load all three data files
+        const responses = await Promise.all([
+          fetch("/src/data/airports.dat"),
+          fetch("/src/data/routes.dat"),
+          fetch("/src/data/airlines.dat"),
+        ]);
 
-      // Update React state
-      setNetwork(networkData);
-      setAirports(airportData);
-      setRoutes(routeData);
-      setAirlines(airlineData);
-      setAirlineLookup(airlineLookupData);
-    });
+        // Check for failed requests
+        const failedResponse = responses.find((response) => !response.ok);
+
+        if (failedResponse) {
+          throw new Error(`Failed to load data: HTTP ${failedResponse.status}`);
+        }
+
+        // Read the file contents
+        const [airportText, routeText, airlineText] = await Promise.all(
+          responses.map((response) => response.text()),
+        );
+
+        // Parse the raw data
+        const airportData = parseAirports(airportText);
+        const routeData = parseRoutes(routeText);
+        const airlineData = parseAirlines(airlineText);
+
+        // Check that the datasets contain data
+        if (!airportData.length || !routeData.length || !airlineData.length) {
+          throw new Error("One or more datasets are empty.");
+        }
+
+        // Build the airline lookup
+        const airlineLookupData = createAirlineLookup(airlineData);
+
+        // Build the flight network
+        const networkData = buildNetwork(
+          airportData,
+          routeData,
+          airlineLookupData,
+        );
+
+        if (!networkData.nodes.length || !networkData.links.length) {
+          throw new Error("Unable to build the flight network.");
+        }
+
+        // Update React state
+        if (!cancelled) {
+          setNetwork(networkData);
+          setAirports(airportData);
+          setRoutes(routeData);
+          setAirlines(airlineData);
+          setAirlineLookup(airlineLookupData);
+        }
+      } catch (error) {
+        console.error("Data loading error:", error);
+
+        if (!cancelled) {
+          setLoadError(
+            "Unable to load the flight network data. Please refresh the page and try again.",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Airports with usable names and city information
@@ -103,6 +158,23 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
         airline.name !== "\\N",
     )
     .sort((a, b) => a.name.localeCompare(b.name));
+
+  useEffect(() => {
+    if (!canvasContainerRef.current) return;
+
+    const updateWidth = () => {
+      setCanvasWidth(canvasContainerRef.current.clientWidth);
+    };
+
+    updateWidth();
+
+    const resizeObserver = new ResizeObserver(updateWidth);
+    resizeObserver.observe(canvasContainerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   // Clear airline selection if it is no longer available
   useEffect(() => {
@@ -164,13 +236,23 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
     setToQuery("");
   }, [resetFilters]);
 
+  // Show a loading message while the datasets are being loaded
+  if (isLoading) {
+    return <div className="loading-message">Loading flight network...</div>;
+  }
+
+  // Show an error message if loading fails
+  if (loadError) {
+    return <div className="error-message">{loadError}</div>;
+  }
+
   return (
     <div className="flight-layout">
-      <div className="canvas-container">
+      <div className="canvas-container" ref={canvasContainerRef}>
         <FlightNetworkCanvas
           network={filteredNetwork}
-          width={800}
-          height={600}
+          width={canvasWidth}
+          height={canvasWidth * 0.75}
         />
       </div>
 
