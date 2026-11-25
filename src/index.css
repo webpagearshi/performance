@@ -241,3 +241,27 @@ body {
   display: flex;
   justify-content: center;
 }
+
+.data-attribution {
+  width: 100%;
+  padding: 20px 24px;
+  text-align: center;
+  background: #ffffff;
+  border-top: 1px solid #dce1f0;
+  color: #596b9b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.data-attribution p {
+  margin: 3px 0;
+}
+
+.data-attribution a {
+  color: #293f85;
+  text-decoration: underline;
+}
+
+.data-attribution a:hover {
+  color: #596db5;
+}
