@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import {
   parseAirports,
   parseRoutes,
@@ -55,15 +55,17 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
   }, []);
 
   // Airports with usable names and city information
-  const searchableAirports = airports
-    .filter(
-      (airport) =>
-        airport.name &&
-        airport.name !== "\\N" &&
-        airport.city &&
-        airport.city !== "\\N",
-    )
-    .sort((a, b) => a.city.localeCompare(b.city));
+  const searchableAirports = useMemo(() => {
+    return airports
+      .filter(
+        (airport) =>
+          airport.name &&
+          airport.name !== "\\N" &&
+          airport.city &&
+          airport.city !== "\\N",
+      )
+      .sort((a, b) => a.city.localeCompare(b.city));
+  }, [airports]);
 
   // Filter airports based on the typed city or airport name
   const filteredFromAirports = searchableAirports.filter((airport) =>

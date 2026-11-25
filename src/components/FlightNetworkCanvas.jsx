@@ -8,8 +8,15 @@ function drawRoutes(ctx, links, airportLookup) {
   ctx.beginPath();
 
   for (const link of links) {
-    const source = airportLookup.get(link.source);
-    const target = airportLookup.get(link.target);
+    const source =
+      typeof link.source === "object"
+        ? link.source
+        : airportLookup.get(link.source);
+
+    const target =
+      typeof link.target === "object"
+        ? link.target
+        : airportLookup.get(link.target);
 
     if (!source || !target) continue;
 
@@ -23,6 +30,7 @@ function drawRoutes(ctx, links, airportLookup) {
   ctx.setLineDash([4, 3]);
   ctx.stroke();
 
+  ctx.setLineDash([]);
   ctx.globalAlpha = 1;
 }
 
@@ -43,6 +51,9 @@ function FlightNetworkCanvas({ network, width, height }) {
   const airportQuadtreeRef = useRef(null);
   const simulationNodesRef = useRef([]);
   const simulationLinksRef = useRef([]);
+  const simulationRef = useRef(null);
+  const pointerPositionRef = useRef(null);
+  const pointerFrameRef = useRef(null);
   const [hoveredAirport, setHoveredAirport] = useState(null);
 
   console.log("Canvas network:", network);
@@ -125,6 +136,8 @@ function FlightNetworkCanvas({ network, width, height }) {
       ...node,
       geoX: node.x,
       geoY: node.y,
+      fx: node.x,
+      fy: node.y,
     }));
 
     const simulationLinks = network.links.map((link) => ({
@@ -134,6 +147,25 @@ function FlightNetworkCanvas({ network, width, height }) {
     // Store simulation data in refs
     simulationNodesRef.current = simulationNodes;
     simulationLinksRef.current = simulationLinks;
+
+    // Configure the D3 force simulation
+    const simulation = d3
+      .forceSimulation(simulationNodes)
+      .force(
+        "link",
+        d3
+          .forceLink(simulationLinks)
+          .id((node) => node.id)
+          .distance(30)
+          .strength(0.001),
+      )
+      .force("charge", d3.forceManyBody().strength(-1))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("x", d3.forceX((node) => node.geoX).strength(0.9))
+      .force("y", d3.forceY((node) => node.geoY).strength(0.9))
+      .stop();
+
+    simulationRef.current = simulation;
 
     // Create airport lookup
     const airportLookup = new Map(
@@ -145,18 +177,63 @@ function FlightNetworkCanvas({ network, width, height }) {
       .quadtree()
       .x((node) => node.x)
       .y((node) => node.y)
-      .addAll(positionedNodes);
+      .addAll(simulationNodes);
 
     // Find the airport nearest to a Canvas position
     const nearestAirport = airportQuadtreeRef.current.find(400, 300);
 
     console.log("Nearest airport to Canvas center:", nearestAirport);
 
-    // Draw all routes first
-    drawRoutes(ctx, network.links, airportLookup);
+    // Redraw the Canvas on every simulation tick
+    simulation.on("tick", () => {
+      ctx.clearRect(0, 0, width, height);
 
-    // Draw airports on top
-    drawAirports(ctx, positionedNodes);
+      // Redraw background
+      ctx.fillStyle = "#f5f6fc";
+      ctx.fillRect(0, 0, width, height);
+
+      // Redraw countries
+      ctx.beginPath();
+      path(countries);
+
+      ctx.fillStyle = "#e3e8f7";
+      ctx.fill();
+
+      // Redraw latitude and longitude lines
+      ctx.beginPath();
+      path(graticule);
+
+      ctx.strokeStyle = "#c3cce5";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+
+      // Redraw country borders
+      ctx.beginPath();
+      path(countries);
+
+      ctx.strokeStyle = "#9baad1";
+      ctx.lineWidth = 0.6;
+      ctx.stroke();
+
+      // Create lookup using the simulation nodes
+      const simulationAirportLookup = new Map(
+        simulationNodes.map((node) => [node.id, node]),
+      );
+
+      // Draw routes
+      drawRoutes(ctx, simulationLinks, simulationAirportLookup);
+
+      // Draw airports
+      drawAirports(ctx, simulationNodes);
+    });
+    // Start the force simulation
+    simulation.alpha(1).restart();
+    simulation.on("end", () => {
+      simulation.stop();
+    });
+    return () => {
+      simulation.stop();
+    };
   }, [network, width, height]);
 
   useEffect(() => {
@@ -182,22 +259,46 @@ function FlightNetworkCanvas({ network, width, height }) {
     ctx.fillStyle = "#293f85";
     ctx.fill();
   }, [hoveredAirport, width, height]);
+  useEffect(() => {
+    return () => {
+      if (pointerFrameRef.current) {
+        cancelAnimationFrame(pointerFrameRef.current);
+      }
+    };
+  }, []);
 
   const handleMouseMove = (event) => {
     const canvas = overlayRef.current;
     const rect = canvas.getBoundingClientRect();
 
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    pointerPositionRef.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    };
 
-    const nearestAirport = airportQuadtreeRef.current?.find(mouseX, mouseY, 12);
+    // Don't schedule another lookup if one is already waiting
+    if (pointerFrameRef.current) return;
 
-    setHoveredAirport((previousAirport) => {
-      if (previousAirport?.id === nearestAirport?.id) {
-        return previousAirport;
-      }
+    pointerFrameRef.current = requestAnimationFrame(() => {
+      pointerFrameRef.current = null;
 
-      return nearestAirport || null;
+      const position = pointerPositionRef.current;
+
+      if (!position || !airportQuadtreeRef.current) return;
+
+      const nearestAirport = airportQuadtreeRef.current.find(
+        position.x,
+        position.y,
+        12,
+      );
+
+      setHoveredAirport((previousAirport) => {
+        if (previousAirport?.id === nearestAirport?.id) {
+          return previousAirport;
+        }
+
+        return nearestAirport || null;
+      });
     });
   };
 
