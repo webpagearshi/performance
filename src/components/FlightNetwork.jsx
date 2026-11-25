@@ -38,9 +38,9 @@ function FlightNetwork({ isSearchOpen, resetFilters }) {
 
         // Load all three data files
         const responses = await Promise.all([
-          fetch("/src/data/airports.dat"),
-          fetch("/src/data/routes.dat"),
-          fetch("/src/data/airlines.dat"),
+          fetch(`${import.meta.env.BASE_URL}data/airports.dat`),
+          fetch(`${import.meta.env.BASE_URL}data/routes.dat`),
+          fetch(`${import.meta.env.BASE_URL}data/airlines.dat`),
         ]);
 
         // Check for failed requests
